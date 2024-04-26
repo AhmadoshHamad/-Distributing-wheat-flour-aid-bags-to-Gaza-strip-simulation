@@ -12,25 +12,21 @@
 #include <sys/ipc.h>
 #include <sys/shm.h>
 
-// Header files
+// incldue plane class
 #include "headers/plane.h"
 #include "headers/SharedMemory.h"
 #include "headers/Container.h"
+#include "headers/Idf.h"
 
-using namespace std;
-
+#define KEY 10
 #define MEMORY_SIZE  4096
-#define key 10
 
 
-int shmid; // shared memory id
-char * shmPtr; // shared memory pointer
-
-
-int main(int argc, char * argv []){
-    
-        // create a shared memory if exisits use it 
-    if ( (shmid = shmget(key, MEMORY_SIZE, IPC_CREAT | 0666)) < 0 ) {
+int main(){
+    int shmid;
+    char * shmPtr;
+         // create a shared memory if exisits use it 
+    if ( (shmid = shmget(KEY, MEMORY_SIZE, IPC_CREAT | 0666)) < 0 ) {
         perror("shmget fail");
         exit(1);
     }
@@ -41,16 +37,14 @@ int main(int argc, char * argv []){
         exit(2);
     }
 
-    Plane plane(5,50,2,12);
+
    
+    Container container(0,0);
 
-    Container container(plane.altidute,100);
+    memcpy(&container,shmPtr,sizeof(Container));
+    container.printDetails();
 
-    memcpy(shmPtr,&container,sizeof(Container));
-    
-   
 
-    
 
 
 }
