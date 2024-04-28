@@ -8,7 +8,7 @@ class Container
     public:
         int altidute; // the distance above the ground
         int weight; // the weight of the container so the splitter will split them in 1 kilos bags
-
+        
     
          Container(int altidute,int weight ){ // constructor for the plane
         
