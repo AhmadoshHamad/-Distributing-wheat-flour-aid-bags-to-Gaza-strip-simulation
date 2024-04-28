@@ -1,55 +1,40 @@
-#include <bits/stdc++.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <string.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <fcntl.h>
-#include <errno.h>
-#include <sys/wait.h>
-#include <signal.h>
-#include <sys/ipc.h>
-#include <sys/shm.h>
-#include <semaphore.h>
+#include "headers/all.h"
 
-// incldue plane class
-#include "headers/plane.h"
-#include "headers/SharedMemory.h"
-
-
-#define MEMORY_SIZE  4096
-#define key 10
-
-
-
-using namespace std;
 int shmid;
 char * shmPtr;
 sem_t *sem;
 
 
 int main( int argc, char *argv []){
-  string str = std::to_string(getpid());
-  const char* sem_name = str.c_str();
+  shmid = create_OpenSharedMemory(10);
+  shmPtr = attachSharedMemory(shmid);
+  int start =0; // start of the shared pointer location
+  memcpy(shmPtr,&start,sizeof(int));
+
+  for (size_t i = 0; i < 5; i++){
+      pid_t pid = fork();
+       char index[2]; // Convert integer index to string
+        snprintf(index, sizeof(index), "%zu", i);
+       if(pid == 0 )
+          execlp("./plane","plane",index);
+  }
   
+    for (size_t i = 0; i < 5; i++)
+    {
+      wait(NULL);
+    }
 
-sem = sem_open(sem_name,O_CREAT,0666,1);
-
-        if (sem == SEM_FAILED) {
-            // Semaphore already exists, open it
-            sem = sem_open(sem_name, 0);
-            if (sem == SEM_FAILED) {
-                perror("sem_open");
-                exit(EXIT_FAILURE);
-            }
-        }
-        else{
-          cout << "Im heeeeeeere";
-        }
+    shmPtr+=4;
 
 
-        sleep(2);
+    for (size_t i = 0; i < 5; i++){
+      Container container(0,0);
+      memcpy(&container,shmPtr,sizeof(Container));
+      container.printDetails();
+      shmPtr += sizeof(Container);
+    }
+    
+    
 
 
 

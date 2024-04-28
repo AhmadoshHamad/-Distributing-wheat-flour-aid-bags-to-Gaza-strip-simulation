@@ -1,56 +1,44 @@
-#include <bits/stdc++.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <string.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <fcntl.h>
-#include <errno.h>
-#include <sys/wait.h>
-#include <signal.h>
-#include <sys/ipc.h>
-#include <sys/shm.h>
+#include "headers/all.h"
 
-// Header files
-#include "headers/plane.h"
-#include "headers/SharedMemory.h"
-#include "headers/Container.h"
-
-using namespace std;
-
-#define MEMORY_SIZE  4096
-#define key 10
+0002 >> 0000000 >> 0000000 >> 0000000 
 
 
 int shmid; // shared memory id
 char * shmPtr; // shared memory pointer
+char * plane_sem = "/planeSemapore";
 
 
 int main(int argc, char * argv []){
+
+    sem_t * mutex;
     
-        // create a shared memory if exisits use it 
-    if ( (shmid = shmget(key, MEMORY_SIZE, IPC_CREAT | 0666)) < 0 ) {
-        perror("shmget fail");
-        exit(1);
-    }
+    mutex =  create_openSemaphore(plane_sem);
 
-        // return a pointer of the shared memory to use it 
-    if ( (shmPtr = (char *) shmat(shmid, 0, 0)) == (char *) -1 ) {
-        perror("shmat: parent");
-        exit(2);
-    }
+    sem_wait(mutex);
 
-    Plane plane(5,50,2,12);
-   
 
-    Container container(plane.altidute,100);
+      // create a shared memory if exisits use it 
+    shmid = create_OpenSharedMemory(10);
+    // return a pointer of the shared memory to use it 
+    shmPtr = attachSharedMemory(shmid);
 
+    // navigate to the shared memory location 
+    int offset = PlaneCriticalSection(10);
+    shmPtr += 4;
+    shmPtr += (offset * sizeof(Container));
+
+    // data to write
+    int a = (argc > 1) ? atoi(argv[1]):999;
+    Plane plane(5,50,2,150);
+    Container container(plane.altidute + a,a +10);
+    
+    // copy data to shared memory
     memcpy(shmPtr,&container,sizeof(Container));
-    
-   
 
-    
+    sleep(1);
+    // release the mutex lock
+    sem_post(mutex);
 
+      
 
 }

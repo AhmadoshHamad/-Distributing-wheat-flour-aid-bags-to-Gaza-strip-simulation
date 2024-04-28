@@ -1,25 +1,4 @@
-#include <bits/stdc++.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <string.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <fcntl.h>
-#include <errno.h>
-#include <sys/wait.h>
-#include <signal.h>
-#include <sys/ipc.h>
-#include <sys/shm.h>
-
-// incldue plane class
-#include "headers/plane.h"
-#include "headers/SharedMemory.h"
-#include "headers/Container.h"
-#include "headers/Idf.h"
-
-#define KEY 10
-#define MEMORY_SIZE  4096
+#include "headers/all.h"
 
 
 int main(){
