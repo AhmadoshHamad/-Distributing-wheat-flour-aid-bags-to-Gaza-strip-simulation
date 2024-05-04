@@ -10,64 +10,237 @@
 #include <sys/wait.h>
 #include <signal.h>
 #include <fstream>
+#include <random>
+#include <sys/ipc.h>
+#include <sys/sem.h>
+#include <sys/shm.h>
+#include <wait.h>
 using namespace std;
 int planes=0;
 int readFromFile(std::string);
-int main(int argc, char * argv []){
+struct colleCommittee{
+    int pidTeam[5];
+    int energy[5];
+    int bag; // the wheat flour containers
+};
+struct collectors {
+    pid_t pids[30]; // Array to store process IDs
+    struct colleCommittee colle[20];
+};
 
+struct splitting {
+    int pids[30];
+};
+struct distCommittee{
+    int pidTeam;
+    int energy;
+    int status;
+    int numberOfBags;
+};
 
-    planes = readFromFile("planes=");
-    // cout << argc << endl;
-    cout << "number of arguments is " << argc << endl; 
+struct distribution {
+    pid_t pids[50];
+    struct distCommittee dist[50];
+};
+
+struct family{
+    int starvationRate;
+    int status;
+    int id;
+};
+struct families{
+    struct family fam[50];
+};
+int counter =0;
+void seedRandom();
+void seedRandom() {
+    std::time_t currentTime = std::time(nullptr);
+    pid_t pid = getpid() + counter;
+    unsigned int seed = static_cast<unsigned int>(currentTime) ^ static_cast<unsigned int>(pid);
+    srand(seed);
+    counter++;
+}
+
+// Get a random number in the range [min, max]
+int getRandomRange(int min, int max) {
+    return min + rand() % (max - min + 1);
+}
+int generateRandomNumber(int min, int max) {
+    // Seed the random number generator with current time
+    random_device rd;
+    mt19937 gen(rd());
     
-    // argv order families then cargo planes then idf 
-    for (size_t parameter = 1; parameter < argc; parameter++){// loop over the paremter passed with the ./main
-       
-       // convert each parameter to an integer and make childs for familes, then planes, then idf
-      for (size_t i = 0; i < planes; i++){
-        char k[5];
-        snprintf(k,sizeof(int),"%d",i);
+    // Define the distribution for random numbers within the specified range
+    uniform_int_distribution<> dis(min, max);
+    
+    // Generate and return a random number within the specified range
+    return dis(gen);
+}
+
+
+int main(int argc, char * argv []){
+    pid_t ppid = getppid();
+    int collectorsTeams = readFromFile("collectorsCommitteesCount=");
+    int collectorsMembers = readFromFile("collectorsCommitteeMemberCount=");
+    int splittingMembers = readFromFile("splittersCommitteeMemberCount=");
+    int distributionTeams = readFromFile("distributersCommitteesCount=");
+    int distributionMembers = readFromFile("distributersCommitteeMemberCount=");
+    int minimumStarvationRate = readFromFile("minimumStarvationRate=");
+    int maximumStarvationRate = readFromFile("maximumStarvationRate=");
+    int families= readFromFile("families=");
+
+    int shmid;
+    char *shmptr;
+    key_t shm_keyCollectors = ftok("/tmp", 'A'); // Using a constant value as the second argument for uniqueness
+    key_t shm_keySplitters = ftok("/tmp", 'B'); // Using a constant value as the second argument for uniqueness
+    key_t shm_keyDistributers = ftok("/tmp", 'd'); // Using a constant value as the second argument for uniqueness
+    key_t shm_keyFamily = ftok("/tmp", 'f'); // Using a constant value as the second argument for uniqueness
+
+    int shmid_collectors = shmget(shm_keyCollectors, sizeof(struct collectors), IPC_CREAT | 0666);
+    if (shmid_collectors == -1) {
+        perror("shmget (collectors)");
+        exit(1);
+    }
+
+    int shmid_splitting = shmget(shm_keySplitters, sizeof(struct splitting), IPC_CREAT | 0666);
+    if (shmid_splitting == -1) {
+        perror("shmget (splitting)");
+        exit(1);
+    }
+
+    int shmid_distribution = shmget(shm_keyDistributers, sizeof(struct distribution), IPC_CREAT | 0666);
+    if (shmid_distribution == -1) {
+        perror("shmget (distribution)");
+        exit(1);
+    }
+
+    int shmid_families = shmget(shm_keyFamily, sizeof(struct families), IPC_CREAT | 0666);
+    if (shmid_families  == -1) {
+        perror("shmget (families)");
+        return 1;
+    }
+
+    struct collectors * collectors_ptr = (struct collectors *)shmat(shmid_collectors, NULL, 0);
+    if (collectors_ptr == (void *) -1) {
+        perror("shmat (collectors)");
+        exit(1);
+    }
+
+    struct splitting * splitting_ptr = (struct splitting *)shmat(shmid_splitting, NULL, 0);
+    if (splitting_ptr == (void *) -1) {
+        perror("shmat (splitting)");
+        exit(1);
+    }
+
+    struct distribution * distribution_ptr = (struct distribution *)shmat(shmid_distribution, NULL, 0);
+    if (distribution_ptr == (void *) -1) {
+        perror("shmat (distribution)");
+        exit(1);
+    }
+    struct families *families_ptr = (struct families *)shmat(shmid_families, NULL, 0);
+    if (families_ptr== (void *)-1) {
+        perror("shmat (families)");
+        return 1;
+    }
+
+    for(int i=0; i<families;i++){    
+        seedRandom();
+        families_ptr->fam[i].starvationRate = generateRandomNumber(minimumStarvationRate, maximumStarvationRate);
+        families_ptr->fam[i].status =0;
+        families_ptr->fam[i].id =i;
+    }
+    for(int i=0; i<5; i++){
+
         if(!fork())
-            execlp("./plane", k);
-      }   
+            execlp("./plane", "plane", to_string(i).c_str(), nullptr);
     }
-    for (int i = 0; i < planes; ++i) { 
-        int status; // the status of the each child
-         // the -1 means that the parent waits for any child to die and by performing it in a loop it will wait for all children 
-        pid_t child_pid = waitpid(-1, &status, 0); 
 
-        if (child_pid > 0) {
-            cout << "Child process " << child_pid << " has terminated" << endl;
+    for(int i=0; i<collectorsTeams; i++){
+
+        if(!fork())
+            execlp("./collect", "collect", to_string(i).c_str(), nullptr);
+    }
+
+    for(int i=0; i<splittingMembers; i++){
+
+        if(!fork())
+            execlp("./split", "split", to_string(i).c_str(), nullptr);   
+    }
+
+    for(int i=0; i<distributionTeams; i++){
+
+        if(!fork())
+            execlp("./distribute", "distribute", to_string(i).c_str(), nullptr); 
+    }
+
+    for (int i = 0; i < 25; i++) {
+        int status;
+        wait(&status);
+        if (WIFEXITED(status)) {
+            std::cout << "Child process exited with status " << WEXITSTATUS(status) << std::endl;
+        } else {
+            std::cerr << "Child process terminated abnormally" << std::endl;
         }
+    }
+    cout << "Families:" << endl;
+    for (int i = 0; i < families; ++i) {
+        cout << "Family " << i << ": " << families_ptr->fam[i].starvationRate << endl;
+    }
+    cout << "Shared Memory Contents Collectors:" << endl;
+    for (int i = 0; i < collectorsTeams; ++i) {
+        for(int j=0; j<collectorsMembers; j++){
+            cout << "Worker " << j <<" Team "<<i<< ": " << collectors_ptr->colle[i].pidTeam[j] << " With Energy: "<< collectors_ptr->colle[i].energy[j] << endl ;
+        }
+    }
+
+    cout << "distributers teams:" << endl;
+    for (int i = 0; i < distributionTeams; ++i) {
+        for(int j=0; j<distributionMembers; j++){
+            distribution_ptr->dist[i].numberOfBags =0;
+            cout << "Worker " << j <<" Team "<<i<< ": " << distribution_ptr->dist[i].pidTeam << " With Energy: "<< distribution_ptr->dist[i].energy <<
+            " With bags " << distribution_ptr->dist[i].numberOfBags << endl ;
+        }
+    }
+    if (shmdt(collectors_ptr) == -1) {
+        perror("shmdt (collectors)");
+        exit(1);
+    }
+
+    if (shmdt(splitting_ptr) == -1) {
+        perror("shmdt (splitting)");
+        exit(1);
+    }
+
+    if (shmdt(distribution_ptr) == -1) {
+        perror("shmdt (distribution)");
+        exit(1);
+    }
+    if (shmdt(families_ptr) == -1) {
+        perror("shmdt (distribution)");
+        exit(1);
+    }
+    if (shmctl(shmid_collectors, IPC_RMID, NULL) == -1) {
+        perror("shmctl (collectors)");
+        return 1;
+    }
+    // Delete the shared memory segment
+    if (shmctl(shmid_splitting, IPC_RMID, NULL) == -1) {
+        perror("shmctl (splitting)");
+        return 1;
+    }
+    // Delete the shared memory segment
+    if (shmctl(shmid_distribution, IPC_RMID, NULL) == -1) {
+        perror("shmctl (dist)");
+        return 1;
+    }
+    // Delete the shared memory segment
+    if (shmctl(shmid_families, IPC_RMID, NULL) == -1) {
+        perror("shmctl (dist)");
+        return 1;
     }
 }
 
-int readFromFile(const char parameter[20]) {
-    std::string value = "";
-    std::ifstream inputFile("vars.txt"); // Replace "vars.txt" with your file name
-    if (!inputFile) {
-        std::cerr << "Error opening file." << std::endl;
-        return -1; // Return a default value indicating error
-    }
 
-    std::string line;
-    while (std::getline(inputFile, line)) {
-        size_t equalPos = line.find(parameter, 0, 20); // Searching for the parameter in the line
-
-        if (equalPos != std::string::npos) { // If parameter found
-            // Extract the substring after the parameter
-            value = line.substr(equalPos + 1);
-
-            // Convert the value string to an integer
-            inputFile.close(); // Close the file before returning
-            return std::stoi(value);
-        }
-    }
-    inputFile.close(); // Close the file
-
-    std::cerr << "Parameter not found in the input file." << std::endl;
-    return -1; // Return a default value indicating error
-}
 int readFromFile(std::string parameter) {
     std::string value = "";
     std::ifstream inputFile("vars.txt"); // Replace "vars.txt" with your file name
@@ -85,7 +258,7 @@ int readFromFile(std::string parameter) {
             value = line.substr(equalPos + parameter.length());
 
             // Print for debugging
-            std::cout << "Parameter: " << parameter << ", Extracted value: " << value << std::endl;
+            // std::cout << "Parameter: " << parameter << ", Extracted value: " << value << std::endl;
 
             // Convert the value string to an integer
             inputFile.close(); // Close the file before returning
