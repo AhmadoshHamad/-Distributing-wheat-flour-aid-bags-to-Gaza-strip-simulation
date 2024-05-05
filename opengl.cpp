@@ -3,8 +3,16 @@
 #include <iostream>
 #include <ctime>
 #include <algorithm> 
+#include <fstream> 
+#include <sys/types.h>
+#include <sys/ipc.h>
+#include <sys/shm.h>
+#include <sys/sem.h>
+#include <random>
+#include "dist.h"
 
 using namespace std;
+
 struct Square {
     float x;
     int number;
@@ -16,7 +24,6 @@ struct Square {
     int lastDropTime;
     int lastRefillTime;
 };
-
 struct DropPoint {
     float x;
     float y;
@@ -53,21 +60,54 @@ struct Distributers{
     bool haveBags;
     float orginalX;
 };
+struct colleCommittee{
+    int pidTeam[5];
+    int energy[5];
+    int bag ; // the wheat flour containers
 
+};
+struct collectors {
+    pid_t pids[30]; // Array to store process IDs
+    struct colleCommittee colle[20];
+};
+
+// for squares
 float squareWidth = 0.1f;
 float squareHeight = 0.1f;
 float spacing = 0.1f;
-int numSquares = 5;
-int numidf =5;
+
+// variables
+int numSquares;
+int numidf;
 int numShots;
 int shotInterval;
 int damageRate;
-int FamiliesNum= 0;
-int shotsCount = 0;
-int numcoll=2;
-int spliternum=2;
-int distributersNum=2;
+int duration;
+int FamiliesNum;
+int shotsCount[20]={0};
+
+// given
+int numcoll;
+int spliternum;
+int distributersNum;
+int timePerStarvationRate;
+int familiesStarvationRate;
+int wheatBagsCount;
+int energyDepletionRate;
+int distributersMinimumCount;
+
+
+// timers
 int timer2=0;
+
+int timer3=10;
+int deathrate=70;
+int timer4=0;
+int timer5=10;
+
+int counter=0;
+int timerIDF=0;
+
 
 Square *squares;
 DropPoint *dropPoints;
@@ -77,6 +117,9 @@ Spliters *spliters;
 Families *families;
 Distributers*distributers;
 int maxDropPoints = 100;
+bool animate = true; // Flag to control animation
+bool gameOver = false; // Flag to indicate if the game is over
+
 
 void drawSquare(float x, float y, float width, float height, float r, float g, float b) {
     glColor3f(r, g, b);
@@ -94,18 +137,28 @@ void drawText(float x, float y, string text) {
     }
 }
 void handleShots(int value) {
-    shotsCount++;
+    for (int i = 0; i < numidf; i++)
+    {
+        shotsCount[i]++;
+    }
+    
+    
     for (int i = 0; i < numidf; ++i) {
-        if (shotsCount == idf[i].shotInterval) {
-            shotsCount = 0;
-            sort(dropPoints, dropPoints + maxDropPoints, [](const DropPoint& a, const DropPoint& b) {
-                return a.y > b.y;
-            });
+        if (shotsCount[i] == idf[i].shotInterval) {
+            shotsCount[i] = 0;
+
+            int highestDropIndex = 0;
+            for (int z = 0; z < maxDropPoints; ++z) {
+                if (dropPoints[z].y > dropPoints[highestDropIndex].y && dropPoints[z].health == 100) {
+                    highestDropIndex = z;
+                }
+            }
             for (int j = 0; j < idf[i].shots; ++j) {
-                if (j < maxDropPoints && dropPoints[j].active) {
-                        if (dropPoints[j].health!=0){
-                        dropPoints[j].health -= idf[i].damageRate;
-                        if (dropPoints[j].health <= 0) {
+                if ( dropPoints[highestDropIndex].active) {
+                        if (dropPoints[highestDropIndex].health!=0){
+                        dropPoints[highestDropIndex].health -= idf[i].damageRate;
+                        if (dropPoints[highestDropIndex].health <= 0) {
+                            dropPoints[highestDropIndex].health=0;
                         }
                     }
                 }
@@ -181,13 +234,21 @@ void initializeSquares() {
        idf[i].damageRate=damageRate;
     }
     float spacing = 0.05f;
+    key_t shm_keyCollectors = ftok("/tmp", 'A'); 
+    int shmid_collectors = shmget(shm_keyCollectors, sizeof(struct collectors), IPC_CREAT | 0666);
+    if (shmid_collectors == -1) {
+        perror("shmget (collectors)");
+    }
+    struct collectors *collectors_ptr = (struct collectors *)shmat(shmid_collectors, NULL, 0);
+    if (collectors_ptr == (void *)-1) {
+        perror("shmat (collectors)");
+    }
      for (int i = 0; i < numcoll; ++i) {
-       collecters[i].health=100;
+       collecters[i].health=collectors_ptr->colle[i].energy[0];
        collecters[i].containers=0;
        collecters[i].y =-0.9f;
        collecters[i].x = (i * (squareWidth - 0.05f + spacing))-0.2f;
        collecters[i].timer=0;
-       
     }
     for (int i = 0; i < spliternum; ++i) {
        spliters[i].weight=0;
@@ -195,21 +256,48 @@ void initializeSquares() {
        spliters[i].x = (i * (squareWidth - 0.05f + spacing))-0.2f;
        spliters[i].timer=0;
     }
+        key_t shm_keyFamily = ftok("/tmp", 'f'); // Using a constant value as the second argument for uniqueness
+        int shmid_families = shmget(shm_keyFamily, sizeof(struct families), IPC_CREAT | 0666);
+        if (shmid_families  == -1) {
+            perror("shmget (families)");
+            
+        }
+        struct families *families_ptr = (struct families *)shmat(shmid_families, NULL, 0);
+        if (families_ptr == (void *)-1) {
+            perror("shmat (families)");
+        }
     for (int i = 0; i< FamiliesNum; i++)
     {
-        families[i].starvation = rand() % 11 + 10; 
+        families[i].starvation =families_ptr->fam[i].starvationRate ; 
+    }
+    key_t shm_key = ftok("/tmp", 'd');
+    int shmid_distribution = shmget(shm_key, sizeof(struct distribution), IPC_CREAT | 0666);
+    if (shmid_distribution == -1) {
+        perror("shmget (dist)");
+    }
+    struct distribution *distributers_ptr = (struct distribution *)shmat(shmid_distribution, NULL, 0);
+    if (distributers_ptr == (void *)-1) {
+        perror("shmat (dist)");
     }
     for(int i=0; i<distributersNum;i++){
-        distributers[i].bags=10;
-        distributers[i].health=100;
+        distributers[i].bags=wheatBagsCount;
+        distributers[i].health=distributers_ptr->dist[i].energy;
         distributers[i].y =-1.0f;
         distributers[i].x = -i * (squareWidth - 0.05f + spacing );
         distributers[i].orginalX = (-i * (squareWidth - 0.05f + spacing ))-0.1f;
         distributers[i].haveBags=false;
     }
+}
+void gameOverFunc(int value) {
+    animate = false;
+    gameOver = true;
+    glutPostRedisplay();
     
 }
 void display() {
+    
+    if (animate ){
+
     glClear(GL_COLOR_BUFFER_BIT);
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
@@ -291,8 +379,8 @@ void display() {
                 for(int k=0; k<numcoll;k++){
                     if(collecters[k].containers==0){
                         collecters[k].x = dropPoints[j].x;
-                        collecters[k].containers+=dropPoints[i].health;
-                        collecters[k].health-=5;
+                        collecters[k].containers+=dropPoints[j].health;
+                        collecters[k].health-=energyDepletionRate;
                         dropPoints[j].active=false;
                         break;         
                     }else{
@@ -301,9 +389,8 @@ void display() {
                         }
                     }
                 }
-            }
-           
-        }
+            }     
+    }
         
         numText = to_string(collecters[i].health);
         if(collecters[i].health>0){
@@ -311,6 +398,7 @@ void display() {
         }  
       
     }
+
     for (int i = 0; i < distributersNum; ++i) {        
         drawSquare(distributers[i].x +0.1f, distributers[i].y, squareWidth - 0.05f, squareHeight - 0.05f, 1.0f, 0.7f, 0.7f);
         string numText = to_string(distributers[i].health);
@@ -321,7 +409,7 @@ void display() {
     for (int j = 0; j < spliternum; j++){
         for (int i = 0; i < distributersNum; i++)
         {
-            if(spliters[j].weight>distributers[i].bags && spliters[j].timer==3 && distributers[i].haveBags==false ){
+            if(spliters[j].weight>distributers[i].bags &&spliters[j].timer==1 &&  distributers[i].haveBags==false ){ 
                 spliters[j].weight-=distributers[i].bags;
                 spliters[j].timer=0;
                 distributers[i].haveBags=true;
@@ -336,9 +424,14 @@ void display() {
                 distributers[i].x-=0.05f;
             }  
             if(distributers[i].x<=-0.89f )
-            {   if(families[mostStarvationIndex].starvation>=20){
-                   families[mostStarvationIndex].starvation-=20;
+            {   if(families[mostStarvationIndex].starvation-(distributers[i].bags*10)<=0){
+                   families[mostStarvationIndex].starvation=0;
                 }
+                else{
+
+                    families[mostStarvationIndex].starvation-=distributers[i].bags*10;
+                }
+                distributers[i].health-=energyDepletionRate;
                 distributers[i].x=distributers[i].orginalX;
                 distributers[i].haveBags=true;
 
@@ -358,7 +451,7 @@ void display() {
                                     drawSquare(spliters[i].x, spliters[i].y, squareWidth - 0.05f, squareHeight - 0.05f, 1.0f, 0.0f, 0.0f);
                                     collecters[k].containers=0;
                                     collecters[k].timer=0;  
-                                    if(spliters[i].timer!=3){
+                                    if(spliters[i].timer!=1){
                                        spliters[i].timer++;
                                     }
                                     break;          
@@ -373,9 +466,9 @@ void display() {
         drawSquare(x , yf, squareWidth -0.05f, squareHeight-0.05f, 0.7f, 1.0f, 0.7f);
         string numText = to_string(families[i].starvation);
         drawText(x + (squareWidth / 2)-0.05f , yf + squareHeight-0.05f , numText);
-        if (timer2==5){
-        families[i].starvation+=1;
-        families[i+1].starvation+=1;
+        if (timer2==timePerStarvationRate){
+        families[i].starvation+=familiesStarvationRate;
+        families[i+1].starvation+=familiesStarvationRate;
         } 
         if(i+1 == FamiliesNum)
              break;
@@ -391,18 +484,105 @@ void display() {
     } 
     for (int i = 0; i < numidf;) {
         float x = -0.89f ;
-        if(shotsCount==idf[i].shotInterval-1){
+        if(shotsCount[i]==idf[i].shotInterval-1){
             drawSquare(x, y, squareWidth -0.05f, squareHeight-0.05f, 1.0f, 0.0f, 0.0f);
         }else{
             drawSquare(x, y, squareWidth -0.05f, squareHeight-0.05f, 1.0f, 1.0f, 0.0f);
         }
+        
+        
+        
+        timer3--;
+        if(timer3<=0){
+            timer3=10;
+           int leastCollectorIndex = 0; // Assume the first collector has the lowest health initially
+            for (int i = 1; i < numcoll; i++) {
+                if (collecters[i].health < collecters[leastCollectorIndex].health) {
+                    leastCollectorIndex = i; // Update the index if a collector with lower health is found
+                }
+            }
+            if (collecters[leastCollectorIndex].health<deathrate){
+            // Shift elements to remove the collector with the lowest health
+            for (int i = leastCollectorIndex; i < numcoll - 1; i++) {
+                collecters[i] = collecters[i + 1]; // Shift elements to the left
+            }
+            drawSquare(x, y, squareWidth -0.05f, squareHeight-0.05f, 0.0f, 0.0f, 1.0f);
+
+            // Decrement the number of collectors since one collector is removed
+            numcoll--;
+            timer4++;
+                   
+            }
+
+            
+        }
+       
+        if (timer4==1){
+            timer4=0;
+            if (spliternum > 0) {
+                numcoll++; // Increment the number of collectors
+                // Shift the elements in the splitters array to remove the first splitter
+                for (int k = 0; k < spliternum - 1; k++) {
+                    spliters[k] = spliters[k + 1]; // Shift elements to the left
+                }
+                
+                // Decrement the number of splitters since one splitter is removed
+                spliternum--;
+            }
+          
+        }
+
+        
+        
+        
         if(i+1 == numidf)
             break;
-        if(shotsCount==idf[i+1].shotInterval-1){
+        if(shotsCount[i+1]==idf[i+1].shotInterval-1){
               drawSquare(x-0.08f, y, squareWidth -0.05f, squareHeight-0.05f, 1.0f, 0.0f, 0.0f);
         }else{
             drawSquare(x-0.08f, y, squareWidth -0.05f, squareHeight-0.05f, 1.0f, 1.0f, 0.0f);
         }
+        timer5--;
+        if(timer5<=0){
+            timer5=10;
+           int leastDIndex = 0; // Assume the first collector has the lowest health initially
+            for (int i = 1; i < distributersNum; i++) {
+                if (distributers[i].health < distributers[leastDIndex].health) {
+                    leastDIndex = i; // Update the index if a collector with lower health is found
+                }
+            }
+            if (distributers[leastDIndex].health<deathrate){
+            // Shift elements to remove the collector with the lowest health
+            for (int i = leastDIndex; i < distributersNum - 1; i++) {
+                distributers[i] = distributers[i + 1]; // Shift elements to the left
+            }
+            drawSquare(x-0.08f, y, squareWidth -0.05f, squareHeight-0.05f, 0.0f, 0.0f, 1.0f);
+
+            // Decrement the number of collectors since one collector is removed
+            distributersNum--;
+            counter++;
+            
+                   
+            }
+
+            
+        }
+       
+            if (spliternum > 0 && counter==distributersMinimumCount ) {
+                counter=0;
+                distributersMinimumCount=1;
+                distributersNum++; // Increment the number of collectors
+
+                // Shift the elements in the splitters array to remove the first splitter
+                for (int k = 0; k < spliternum - 1; k++) {
+                    spliters[k] = spliters[k + 1]; // Shift elements to the left
+                }
+                
+                // Decrement the number of splitters since one splitter is removed
+                spliternum--;
+            }
+        
+
         y += verticalSpacing + squareHeight; // Update y-coordinate for the next square
         i+=2;
     }
@@ -460,28 +640,43 @@ void display() {
         string numText = to_string(dropPoints[i].health);
         drawText(textX, textY, numText);
     }
+
 }
-    glutSwapBuffers();
-}
-int main(int argc, char** argv) {
-    if (argc ==10 ) {
-        numSquares =  stoi(argv[1]);
-    } else {
-        cout << "Usage: " << argv[0] << " <number_of_squares>" << endl;
-        return 1;
+     if(spliternum <=1 ){
+        animate =false;
+        gameOver =true;
+     }
+     glutSwapBuffers();
+    }else if( gameOver ){
+        glColor3f(1.0f, 1.0f, 1.0f); 
+        glRasterPos2f(-0.2f, 0.0f);
+        const char* text = "Game over  majjjad";
+        for (const char* c = text; *c; ++c) {
+            glutBitmapCharacter(GLUT_BITMAP_TIMES_ROMAN_24, *c); 
+        }
+        glutSwapBuffers();
     }
-    
+  
 
-    numShots = atoi(argv[2]);
-    shotInterval = atoi(argv[3]);
-    damageRate = atoi(argv[4]);
-    numidf =atoi(argv[5]);
-    FamiliesNum = atoi(argv[6]);
-    numcoll=atoi(argv[7]);
-    spliternum=atoi(argv[8]);
-    distributersNum=atoi(argv[9]);
+}
 
-   
+int main(int argc, char** argv) {
+
+    numcoll=readFromFile("collectorsCommitteesCount=");
+    spliternum=readFromFile("spilttersCommitteesCount=");
+    distributersNum=readFromFile("distributersCommitteesCount=");
+    numSquares =  readFromFile("planes=");
+    numidf =readFromFile("idf=");
+    FamiliesNum = readFromFile("families=");
+    duration =readFromFile("runTime=");
+    numShots = readFromFile("numberOfShots=");
+    shotInterval = readFromFile("shotsInterval=");
+    damageRate = readFromFile("damageRate=");
+    timePerStarvationRate =readFromFile("timePerStarvationRate=");
+    familiesStarvationRate=readFromFile("familiesStarvationRate=");
+    wheatBagsCount=readFromFile("wheatBagsCount=");
+    energyDepletionRate=readFromFile("energyDepletionRate=");
+    distributersMinimumCount=readFromFile("distributersMinimumCount=");
 
     glutInit(&argc, argv);
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB);
@@ -489,6 +684,7 @@ int main(int argc, char** argv) {
     glutCreateWindow("Project2");
     glClearColor(0.0, 0.0, 0.0, 1.0);
     glOrtho(-1.0, 1.0, -1.0, 1.0, -1.0, 1.0);
+    
 
     squares = new Square[numSquares];
     idf =new IDF[numidf];
@@ -500,6 +696,10 @@ int main(int argc, char** argv) {
     srand(time(nullptr));
     initializeSquares();
     glutDisplayFunc(display);
+    
+   
+
+    glutTimerFunc(duration * 1000, gameOverFunc, 0);
     glutTimerFunc(1000, decreaseNumbers, 0);
     glutMainLoop();
 
