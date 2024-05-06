@@ -5,7 +5,12 @@ char * shmPtr; // shared memory pointer
 
 
 int main(int argc, char * argv []){
-    Plane plane(5,50,1,3);
+  int minimumRefillTime = readFromFile("minimumRefillTime=");
+  int maximumRefillTime = readFromFile("maximumRefillTime=");
+  int minimumContainers = readFromFile("minimumContainerCount=");
+  int maximumContainers = readFromFile("maximumContainerCount=");
+    Plane plane(getRandomRange(minimumRefillTime, maximumRefillTime),50,getRandomRange(minimumContainers, maximumContainers),3);
+    plane.printDetails();
     resetSharedMemory();
 
     for (int i=0; i< plane.containers; i++){
