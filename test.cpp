@@ -1,43 +1,85 @@
 #include "headers/all.h"
-
+#include <semaphore.h>
 int shmid;
 char * shmPtr;
-sem_t *sem;
+// sem_t *sem;
+char idf_semaphore[20] = "/idfsem";
+// char * container_sem = "/containerSemapore";
 
+void close_sem(char *);
 
 int main( int argc, char *argv []){
-  shmid = create_OpenSharedMemory(10);
+  reset();
+  // just empty the shared memory
+  // close_sem(idf_semaphore);
+  sem_open(idf_semaphore,O_CREAT,0660,1);
+  // close_sem(container_sem);
+ 
+  // sleep(5);
+  char zeros [4000];
+  memset(zeros,0,4000);
+
+  shmid = create_OpenSharedMemory(10); 
   shmPtr = attachSharedMemory(shmid);
+  memcpy(shmPtr,&zeros,sizeof(zeros));
   int start =0; // start of the shared pointer location
   memcpy(shmPtr,&start,sizeof(int));
+  pid_t pid;
+
+for (size_t i = 0; i < 5; i++){
+       pid = fork();
+       char index[2]; // Convert integer index to string
+        snprintf(index, sizeof(index), "%zu", i);
+       if(pid == 0 ){
+          execlp("./idf","idf",index);
+       }
+  }
+
+
 
   for (size_t i = 0; i < 5; i++){
-      pid_t pid = fork();
+       pid = fork();
        char index[2]; // Convert integer index to string
         snprintf(index, sizeof(index), "%zu", i);
        if(pid == 0 )
           execlp("./plane","plane",index);
   }
+
+ 
+
   
-    for (size_t i = 0; i < 5; i++)
+    for (size_t i = 0; i < 10; i++)
     {
       wait(NULL);
     }
+    // kill all idf ffor testing purposes only
+    // system("killall idf");
 
-    shmPtr+=4;
+    shmPtr+=8;
 
 
-    for (size_t i = 0; i < 5; i++){
-      Container container(0,0);
-      memcpy(&container,shmPtr,sizeof(Container));
-      container.printDetails();
-      shmPtr += sizeof(Container);
+}
+
+
+
+ void close_sem(char* semName){
+
+     if (sem_unlink(semName) == -1) {
+        perror("sem_unlink");
+        // exit(EXIT_FAILURE);
     }
+
+  }
+
+  
+    // for (size_t i = 0; i < 5; i++){
+    //   Container container(0,0,0);
+    //   memcpy(&container,shmPtr,sizeof(Container));
+    //   container.printDetails();
+    //   shmPtr += sizeof(Container);
+    // }
     
     
-
-
-
    // Close and unlink the semaphore
     // if (sem_close(sem) == -1) {
     //     perror("sem_close");
@@ -48,86 +90,3 @@ int main( int argc, char *argv []){
     //     exit(EXIT_FAILURE);
     // }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    // if ( (shmid = shmget(IPC_PRIVATE, MEMORY_SIZE, IPC_CREAT | 0644)) < 0 ) {
-    //     perror("shmget fail");
-    //     exit(1);
-    // }
-
-    //          // return a pointer of the shared memory to use it 
-    // if ( (shmPtr = (char *) shmat(shmid, 0, 0)) == (char *) -1 ) {
-    //     perror("shmat: parent");
-    //     exit(2);
-    // }
-
-
-
-
-}
-
-
-
-
-// extern etext, edata, end;
-
-// main(void){
-//   printf("")
-
-//   pid_t    pid;
-//   int      shmid;
-//   char     c, *shm, *s;
-  
-
-  
-
-  
-//   printf("Addresses in parent\n\n");
-//   printf("shared mem: %X etext: %X edata: %X end: %X\n\n",
-// 	 shm, &etext, &edata, &end);
-  
-//   s = shm;
-  
-//   for ( c = 'A'; c <= 'Z'; ++c ) /* put some info there */
-//     *s++ = c;
-  
-//   *s = NULL;
-  
-//   printf("In parent before fork, memory is: %s\n", shm);
-  
-//   pid = fork();
-  
-//   switch ( pid ) {
-//   case -1:
-//     perror("fork ");
-//     exit(3);
-    
-//   default:
-//     sleep(5);
-//     printf("\nIn parent after fork, memory is: %s\n", shm);
-//     printf("Parent removing shared memory\n");
-//     shmdt(shm);
-//     shmctl(shmid, IPC_RMID, (struct shmid_ds *) 0);
-//     exit(0);
-
-//   case 0:
-//     printf("In child after fork, memory is:   %s\n", shm);
-//     for (; *shm; ++shm )
-//       *shm += 32;
-    
-//     shmdt(shm);
-//     exit(0);
-//   }
-// }

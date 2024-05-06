@@ -1,43 +1,45 @@
 #include "headers/all.h"
 
-0002 >> 0000000 >> 0000000 >> 0000000 
-
-
 int shmid; // shared memory id
 char * shmPtr; // shared memory pointer
-char * plane_sem = "/planeSemapore";
 
 
 int main(int argc, char * argv []){
+    Plane plane(5,50,1,3);
+    resetSharedMemory();
 
-    sem_t * mutex;
-    
-    mutex =  create_openSemaphore(plane_sem);
+    for (int i=0; i< plane.containers; i++){
+      
+        char index[4]; // Convert integer index to string
+        // plane.altidute+=i;
+        snprintf(index, sizeof(index), "%zu", i);    
+        if(!fork())
+          execlp("./container","container",index);
+        
+        
+        // usleep(500);
 
-    sem_wait(mutex);
+
+        sleep(plane.dropTime);
+      }
 
 
-      // create a shared memory if exisits use it 
-    shmid = create_OpenSharedMemory(10);
-    // return a pointer of the shared memory to use it 
-    shmPtr = attachSharedMemory(shmid);
+      for (size_t i = 0; i < 2; i++){
+        wait(NULL);
+      }
+      
+   
+    //   char * shmPtr = attachSharedMemory(create_OpenSharedMemory(10));
+    //   shmPtr+=8;
 
-    // navigate to the shared memory location 
-    int offset = PlaneCriticalSection(10);
-    shmPtr += 4;
-    shmPtr += (offset * sizeof(Container));
 
-    // data to write
-    int a = (argc > 1) ? atoi(argv[1]):999;
-    Plane plane(5,50,2,150);
-    Container container(plane.altidute + a,a +10);
-    
-    // copy data to shared memory
-    memcpy(shmPtr,&container,sizeof(Container));
+    // for (size_t i = 0; i < 5; i++){
+    //   Container container(0,0,0);
+    //   memcpy(&container,shmPtr,sizeof(Container));
+    //   container.printDetails();
+    //   shmPtr += sizeof(Container);
+    // }
 
-    sleep(1);
-    // release the mutex lock
-    sem_post(mutex);
 
       
 
