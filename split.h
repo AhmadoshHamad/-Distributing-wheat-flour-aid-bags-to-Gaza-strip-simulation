@@ -1,8 +1,8 @@
 int readFromFile(std::string);
 #define SEM_KEY 10 // Example key for the semaphore
 
-struct sembuf lock = {0, -1, SEM_UNDO}; // Semaphore lock operation
-struct sembuf unlock = {0, 1, SEM_UNDO}; // Semaphore unlock operation
+struct sembuf lock1 = {0, -1, SEM_UNDO}; // Semaphore lock operation
+struct sembuf unlock1 = {0, 1, SEM_UNDO}; // Semaphore unlock operation
 using namespace std;
 struct storageRoom{
     int totalWeight;

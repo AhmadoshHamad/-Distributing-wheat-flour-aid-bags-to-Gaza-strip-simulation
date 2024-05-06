@@ -15,7 +15,9 @@
 #include <sys/sem.h>
 #include <sys/shm.h>
 #include <wait.h>
+#include "headers/SharedMemory.h"
 using namespace std;
+void resetSemaphores();
 int planes=0;
 int readFromFile(std::string);
 struct colleCommittee{
@@ -37,7 +39,9 @@ struct distCommittee{
     int status;
     int numberOfBags;
 };
-
+struct storageRoom{
+    int totalWeight;
+};
 struct distribution {
     pid_t pids[50];
     struct distCommittee dist[50];
@@ -79,22 +83,36 @@ int generateRandomNumber(int min, int max) {
 
 
 int main(int argc, char * argv []){
+    resetSharedMemory();
+    resetSemaphores();
+
     pid_t ppid = getppid();
     int collectorsTeams = readFromFile("collectorsCommitteesCount=");
-    int collectorsMembers = readFromFile("collectorsCommitteeMemberCount=");
-    int splittingMembers = readFromFile("splittersCommitteeMemberCount=");
+    int splittingMembers = readFromFile("spilttersCommitteesCount=");
     int distributionTeams = readFromFile("distributersCommitteesCount=");
-    int distributionMembers = readFromFile("distributersCommitteeMemberCount=");
     int minimumStarvationRate = readFromFile("minimumStarvationRate=");
     int maximumStarvationRate = readFromFile("maximumStarvationRate=");
     int families= readFromFile("families=");
-
+    int idfNo = readFromFile("idf=");
+    key_t shm_keyStorage = ftok("/tmp", 'G');
     int shmid;
     char *shmptr;
     key_t shm_keyCollectors = ftok("/tmp", 'A'); // Using a constant value as the second argument for uniqueness
     key_t shm_keySplitters = ftok("/tmp", 'B'); // Using a constant value as the second argument for uniqueness
     key_t shm_keyDistributers = ftok("/tmp", 'd'); // Using a constant value as the second argument for uniqueness
     key_t shm_keyFamily = ftok("/tmp", 'f'); // Using a constant value as the second argument for uniqueness
+    int shmid_storage= shmget(shm_keyStorage, sizeof(struct storageRoom), IPC_CREAT | 0666);
+    if (shmid_storage == -1) {
+        perror("shmget (storage)");
+        return 1;
+    }
+    struct storageRoom *storage = (struct storageRoom *)shmat(shmid_storage, NULL, 0);
+    if (storage == (void *)-1) {
+        perror("shmat (storage)");
+        return 1;
+    }
+    
+    storage->totalWeight = 0;
 
     int shmid_collectors = shmget(shm_keyCollectors, sizeof(struct collectors), IPC_CREAT | 0666);
     if (shmid_collectors == -1) {
@@ -155,6 +173,12 @@ int main(int argc, char * argv []){
             execlp("./plane", "plane", to_string(i).c_str(), nullptr);
     }
 
+    for(int i=0; i<idfNo; i++){
+
+        if(!fork())
+            execlp("./idf", "idf", to_string(i).c_str(), nullptr);
+    }
+
     for(int i=0; i<collectorsTeams; i++){
 
         if(!fork())
@@ -170,7 +194,7 @@ int main(int argc, char * argv []){
     for(int i=0; i<distributionTeams; i++){
 
         if(!fork())
-            execlp("./distribute", "distribute", to_string(i).c_str(), nullptr); 
+            execlp("./dist", "dist", to_string(i).c_str(), nullptr); 
     }
 
     for (int i = 0; i < 25; i++) {
@@ -180,25 +204,6 @@ int main(int argc, char * argv []){
             std::cout << "Child process exited with status " << WEXITSTATUS(status) << std::endl;
         } else {
             std::cerr << "Child process terminated abnormally" << std::endl;
-        }
-    }
-    cout << "Families:" << endl;
-    for (int i = 0; i < families; ++i) {
-        cout << "Family " << i << ": " << families_ptr->fam[i].starvationRate << endl;
-    }
-    cout << "Shared Memory Contents Collectors:" << endl;
-    for (int i = 0; i < collectorsTeams; ++i) {
-        for(int j=0; j<collectorsMembers; j++){
-            cout << "Worker " << j <<" Team "<<i<< ": " << collectors_ptr->colle[i].pidTeam[j] << " With Energy: "<< collectors_ptr->colle[i].energy[j] << endl ;
-        }
-    }
-
-    cout << "distributers teams:" << endl;
-    for (int i = 0; i < distributionTeams; ++i) {
-        for(int j=0; j<distributionMembers; j++){
-            distribution_ptr->dist[i].numberOfBags =0;
-            cout << "Worker " << j <<" Team "<<i<< ": " << distribution_ptr->dist[i].pidTeam << " With Energy: "<< distribution_ptr->dist[i].energy <<
-            " With bags " << distribution_ptr->dist[i].numberOfBags << endl ;
         }
     }
     if (shmdt(collectors_ptr) == -1) {
@@ -278,3 +283,9 @@ int readFromFile(std::string parameter) {
     std::cerr << "Parameter not found in the input file." << std::endl;
     return -1; // Return a default value indicating error
 }
+
+
+
+    void resetSemaphores(){
+        system(" rm  /dev/shm/*");
+    }

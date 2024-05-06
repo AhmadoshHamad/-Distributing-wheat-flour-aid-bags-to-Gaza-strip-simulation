@@ -14,5 +14,6 @@ using namespace std;
 
 int main(int argc, char * argv []){
     sleep(2);
-    cout << "I'm dead " << atoi(argv[0]) <<  endl;
+    cout << "I'm dead" << atoi(argv[0]) <<  endl;
+
 }

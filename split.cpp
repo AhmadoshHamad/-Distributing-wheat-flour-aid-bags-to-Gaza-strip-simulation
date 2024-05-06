@@ -11,7 +11,7 @@
 #include <random>
 #include "split.h"
 int main(int argc, char *argv[]) {
-    int distributionMembers = readFromFile("distributersCommitteeMemberCount=");
+    int distributionMembers = readFromFile("distributersCommitteesCount=");
     int workerNumber = atoi(argv[1]);
     int workerBags = readFromFile("wheatBagsCount=");
 
@@ -51,6 +51,7 @@ int main(int argc, char *argv[]) {
         perror("shmat (dist)");
         return 1;
     }
+    storage->totalWeight = 0;            
     splitting_ptr->pids[workerNumber] = getpid();
 
     int semid = semget(SEM_KEY, 1, IPC_CREAT | IPC_EXCL | 0666);
@@ -63,7 +64,7 @@ int main(int argc, char *argv[]) {
     arg.val = 1;
 
     while(1){
-        semop(semid, &lock, 1);
+        semop(semid, &lock1, 1);
         if(storage->totalWeight > 0){
             for(int i=0; i< distributionMembers; i++){
                 if(distributers_ptr->dist[i].numberOfBags == 0 && distributers_ptr->dist[i].status==0 && storage->totalWeight > 0){
@@ -78,7 +79,7 @@ int main(int argc, char *argv[]) {
                 }
             }
         }
-        semop(semid, &unlock, 1);     
+        semop(semid, &unlock1, 1);     
     }
     if (shmdt(splitting_ptr) == -1) {
         perror("shmdt (dist)");

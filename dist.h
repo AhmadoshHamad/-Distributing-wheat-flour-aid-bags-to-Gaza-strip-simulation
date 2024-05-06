@@ -6,7 +6,9 @@ using namespace std;
 
 struct sembuf lock = {0, -1, SEM_UNDO}; // Semaphore lock operation
 struct sembuf unlock = {0, 1, SEM_UNDO}; // Semaphore unlock operation
-
+struct storageRoom{
+    int totalWeight;
+};
 void seedRandom();
 int generateRandomNumber(int min, int max) {
     // Seed the random number generator with current time

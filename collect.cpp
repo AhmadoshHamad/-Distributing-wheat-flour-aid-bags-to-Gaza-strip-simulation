@@ -14,14 +14,14 @@
 #include "headers/all.h"
 int shmid;
 char * shmPtr;
-char * collect_sem = "/collectSemapore";
+// char * collect_sem = "/collectSemapore";
 //sem_t *sem;
 
 #define SEM_KEY 20 // Example key for the semaphore
-struct sembuf lock1 = {0, -1, SEM_UNDO}; // Semaphore lock operation
-struct sembuf unlock1 = {0, 1, SEM_UNDO}; // Semaphore unlock operation
+struct sembuf lock2 = {0, -1, SEM_UNDO}; // Semaphore lock operation
+struct sembuf unlock2 = {0, 1, SEM_UNDO}; // Semaphore unlock operation
 
-int readFromFile(std::string);
+// int readFromFile(std::string);
 
 using namespace std;
 
@@ -35,37 +35,51 @@ struct collectors {
     pid_t pids[30]; // Array to store process IDs
     struct colleCommittee colle[20];
 };
-struct container{
-    
-    int wheatFlour;
-    int status;
-};
-
-struct containers{
-    
-    struct container con[100]; 
-};
-
- 
 struct safeStorage{
     int wheatFlour;
 };
+int energyDelay(int energy) {
+    int  value;
+    switch(energy/10){
+    case 1:
+        value = 9;
+        break;
+     case 2:
+        value = 8;
+        break;    
+    case 3:
+        value = 7;
+        break;
+    case 4:
+        value = 6;
+        break;
+    case 5:
+        value = 5;
+        break;
+    case 6:
+        value = 4;
+        break;
+    case 7:
+        value = 3;
+        break;
+    case 8:
+        value = 2;
+        break;
+    case 9:
+        value =1;
+        break;
+    default:
+        value =1;
+        break;        
+    } 
+  
+    return value;
+}
+
 int  collectCriticalSection(int);
-void seedRandom();
+
 void readContainer(int i ,struct collectors *collectors_ptr);
-int getRandomRange(int min, int max){
-    seedRandom();
-    return min + rand() % (max - min + 1);
-}
-void seedRandom() {
-    std::time_t currentTime = std::time(nullptr);
 
-    pid_t pid = getpid();
-
-    unsigned int seed = static_cast<unsigned int>(currentTime) ^ static_cast<unsigned int>(pid);
-
-    srand(seed);
-}
 
 int main(int argc, char *argv[]) {
     seedRandom();
@@ -75,6 +89,7 @@ int main(int argc, char *argv[]) {
     int maximumEnergy = readFromFile("maximumEnergy=");  
     int teamleadNumber = atoi(argv[1]);
     int processPerTeamPlusLead =collectorsMembers;
+    int energyDepletionRate = readFromFile("energyDepletionRate=");  
 
     key_t shm_keyCollectors = ftok("/tmp", 'A'); // Using a constant value as the second argument for uniqueness
     key_t shm_keyStorage = ftok("/tmp", 'G');
@@ -132,7 +147,7 @@ int main(int argc, char *argv[]) {
     arg.val = 1;
 
     if(teamleadNumber ==0){
-        safeStorage_ptr->wheatFlour = 50;
+        safeStorage_ptr->wheatFlour = 0;
     }
 
     if (shmdt(collectors_ptr) == -1) {
@@ -144,7 +159,7 @@ int main(int argc, char *argv[]) {
 
         // shmid = create_OpenSharedMemory(10);
         // shmPtr = attachSharedMemory(shmid);
-        shmid = create_OpenSharedMemory(10);
+        shmid = create_OpenSharedMemory(15);
         shmPtr = attachSharedMemory(shmid);
    
         //read the shmem 
@@ -160,76 +175,93 @@ int main(int argc, char *argv[]) {
    
     
     while(1){ 
-        semop(semid, &lock1, 1);
-        int offset=collectCriticalSection(10); 
-        shmPtr += 8;
-        shmPtr += (offset * sizeof(Container));   
-        Container container(0,0);
-        memcpy(&container,shmPtr,sizeof(Container));
-        // container.printDetails();
-        
-        if (container.weight >0 ){
-        collectors_ptr->colle[teamleadNumber].bag=container.weight;
-        cout <<"amrooooooooooooooooooooooooo "<<container.weight<< endl ;
-        cout <<"my id "<< teamleadNumber << " and my bag have "<<collectors_ptr->colle[teamleadNumber].bag<< endl ;
-       // container.status =-1 ;
-        //container.printDetails();
-        safeStorage_ptr->wheatFlour += collectors_ptr->colle[teamleadNumber].bag;
-        cout ""
-        shmPtr = attachSharedMemory(shmid) ;
-        
+        usleep(500000);
+        semop(semid, &lock2, 1);
+        int offset=collectCriticalSection(15); 
+        cout << "offset " << offset << endl;
+        shmPtr += 12;
+        shmPtr += (offset * sizeof(Container));  
+        semop(semid, &unlock2, 1);  
+        Container container(0,0,0);
+        while (1){
+            /* code */
+            memcpy(&container,shmPtr,sizeof(Container));
+            //  container.printDetails();
+            
+            if (container.weight >0 && container.status == 2){
+                collectors_ptr->colle[teamleadNumber].bag=container.weight;
+                collectors_ptr->colle[teamleadNumber].energy[0]-=energyDepletionRate;
+                cout << "Collector energy "<< collectors_ptr->colle[teamleadNumber].energy[0]<< endl;
+                sleep(energyDelay(collectors_ptr->colle[teamleadNumber].energy[0]));
+                cout <<"amrooooooooooooooooooooooooo "<<container.weight<< endl ;
+                cout <<"my id "<< teamleadNumber << " and my bag have "<<collectors_ptr->colle[teamleadNumber].bag<< endl;
+
+            // container.status =-1 ;
+                //container.printDetails();
+                safeStorage_ptr->wheatFlour += collectors_ptr->colle[teamleadNumber].bag;
+                collectors_ptr->colle[teamleadNumber].energy[0]-=energyDepletionRate;
+                cout << "weight storage" << safeStorage_ptr->wheatFlour << endl;
+                sleep(energyDelay(collectors_ptr->colle[teamleadNumber].energy[0]));
+
+                shmPtr = attachSharedMemory(shmid);
+                break;
         }
-            semop(semid, &unlock1, 1); 
+            if(container.status == BLOWN)
+                break;
+
+            sleep(2);
+         }
+     
     
-    sleep(5);
+    sleep(2);
     }
     
        
     return 0;
 }
-int readFromFile(std::string parameter) {
-    std::string value = "";
-    std::ifstream inputFile("vars.txt"); // Replace "vars.txt" with your file name
-    if (!inputFile) {
-        std::cerr << "Error opening file." << std::endl;
-        return -1; // Return a default value indicating error
-    }
+// int readFromFile(std::string parameter) {
+//     std::string value = "";
+//     std::ifstream inputFile("vars.txt"); // Replace "vars.txt" with your file name
+//     if (!inputFile) {
+//         std::cerr << "Error opening file." << std::endl;
+//         return -1; // Return a default value indicating error
+//     }
 
-    std::string line;
-    while (std::getline(inputFile, line)) {
-        size_t equalPos = line.find(parameter);
+//     std::string line;
+//     while (std::getline(inputFile, line)) {
+//         size_t equalPos = line.find(parameter);
 
-        if (equalPos != std::string::npos) { // If parameter found
-            // Extract the substring after the parameter
-            value = line.substr(equalPos + parameter.length());
+//         if (equalPos != std::string::npos) { // If parameter found
+//             // Extract the substring after the parameter
+//             value = line.substr(equalPos + parameter.length());
 
-            // Print for debugging
-            // std::cout << "Parameter: " << parameter << ", Extracted value: " << value << std::endl;
+//             // Print for debugging
+//             // std::cout << "Parameter: " << parameter << ", Extracted value: " << value << std::endl;
 
-            // Convert the value string to an integer
-            inputFile.close(); // Close the file before returning
-            try {
-                return std::stoi(value);
-            } catch (const std::invalid_argument& e) {
-                std::cerr << "Invalid argument: " << e.what() << std::endl;
-                return -1;
-            } catch (const std::out_of_range& e) {
-                std::cerr << "Out of range: " << e.what() << std::endl;
-                return -1;
-            }
-        }
-    }
-    inputFile.close(); // Close the file
+//             // Convert the value string to an integer
+//             inputFile.close(); // Close the file before returning
+//             try {
+//                 return std::stoi(value);
+//             } catch (const std::invalid_argument& e) {
+//                 std::cerr << "Invalid argument: " << e.what() << std::endl;
+//                 return -1;
+//             } catch (const std::out_of_range& e) {
+//                 std::cerr << "Out of range: " << e.what() << std::endl;
+//                 return -1;
+//             }
+//         }
+//     }
+//     inputFile.close(); // Close the file
 
-    std::cerr << "Parameter not found in the input file." << std::endl;
-    return -1; // Return a default value indicating error
-}
+//     std::cerr << "Parameter not found in the input file." << std::endl;
+//     return -1; // Return a default value indicating error
+// }
 
 
 int  collectCriticalSection(int key){
         // create a shared memory if exisits use it 
         char * shmPtr = attachSharedMemory( create_OpenSharedMemory(key));
-
+        shmPtr+=8;
         // return a pointer of the shared memory to use it 
    
         int readed;

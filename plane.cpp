@@ -1,36 +1,40 @@
 #include "headers/all.h"
 
-0002 >> 0000000 >> 0000000 >> 0000000 
-
-
 int shmid; // shared memory id
 char * shmPtr; // shared memory pointer
-char * plane_sem = "/planeSemapore";
 
+
+// to do : refill time of containers (infinite loop)
 
 int main(int argc, char * argv []){
-    sem_t * mutex;  
-    mutex =  create_openSemaphore(plane_sem);
-    sem_wait(mutex);
-      // create a shared memory if exisits use it 
-    shmid = create_OpenSharedMemory(10);
-    // return a pointer of the shared memory to use it 
-    shmPtr = attachSharedMemory(shmid);
+  int minimumRefillTime = readFromFile("minimumRefillTime=");
+  int maximumRefillTime = readFromFile("maximumRefillTime=");
+  int minimumContainers = readFromFile("minimumContainerCount=");
+  int maximumContainers = readFromFile("maximumContainerCount=");
+  int minPlaneHeight = readFromFile("minPlaneHeight=");
+  int maxPlaneHeight = readFromFile("maxPlaneHeight=");
+  int minimumDropContainerTime = readFromFile("minimumDropContainerTime=");
+  int maximumDropContainerTime = readFromFile("maximumDropContainerTime=");
+    // initialise plane with random altidude, noContainers and refill time
+    Plane plane(getRandomRange(minimumRefillTime, maximumRefillTime),    getRandomRange(minPlaneHeight,maxPlaneHeight),     getRandomRange(minimumContainers, maximumContainers),getRandomRange(minimumDropContainerTime,maximumDropContainerTime));
+    plane.printDetails();
+    resetSharedMemory();  
 
-    // navigate to the shared memory location 
-    int offset = PlaneCriticalSection(10);
-    shmPtr += 4;
-    shmPtr += (offset * sizeof(Container));
+    while (1){
+      
+    for (int i=0; i< plane.containers; i++){
+      
+        char index[4]; // Convert integer index to string
+        // plane.altidute+=i;
+        snprintf(index, sizeof(index), "%zu", plane.altidute);    
+        if(!fork())
+          execlp("./container","container",index);
 
-    // data to write
-    int a = (argc > 1) ? atoi(argv[1]):999;
-    Plane plane(5,50,2,150);
-    Container container(plane.altidute + a,a +10);
-    
-    // copy data to shared memory
-    memcpy(shmPtr,&container,sizeof(Container));
+        sleep(plane.dropTime); // time between dropping containers
 
-    sleep(1);
-    // release the mutex lock
-    sem_post(mutex);
+      }
+
+      sleep(plane.refillTime); // refill time of plane
+    }
+
 }

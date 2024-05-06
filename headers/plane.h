@@ -14,7 +14,7 @@ class Plane
     Plane(){ // 
         refillTime =0;
         altidute =0;
-        containers =0;
+        containers= 0;
         dropTime =0;
     }
 

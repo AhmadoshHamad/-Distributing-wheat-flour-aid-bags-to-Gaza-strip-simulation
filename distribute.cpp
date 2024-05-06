@@ -15,7 +15,6 @@ int main(int argc, char *argv[]) {
     seedRandom();
     int familyCounter=0, workerCounter=0;
     int distributionTeams = readFromFile("distributersCommitteesCount=");
-    int distributionMembers = readFromFile("distributersCommitteeMemberCount=");
     int minimumEnergy = readFromFile("minimumEnergy=");
     int maximumEnergy = readFromFile("maximumEnergy=");  
     int energyDepletionRate = readFromFile("energyDepletionRate=");  
@@ -23,12 +22,12 @@ int main(int argc, char *argv[]) {
     int timePerStarvationRate = readFromFile("timePerStarvationRate=");
     int families= readFromFile("families=");
     int teamleadNumber = atoi(argv[1]);
-    int processPerTeamPlusLead =distributionMembers;
 
     cout << "Team lead with process id " << getpid() <<" with number " << teamleadNumber << endl;
 
     key_t shm_key = ftok("/tmp", 'd'); // Using a constant value as the second argument for uniqueness
     key_t shm_keyFamily = ftok("/tmp", 'f'); // Using a constant value as the second argument for uniqueness
+    key_t shm_keyStorage = ftok("/tmp", 'G');
 
     int shmid_distribution = shmget(shm_key, sizeof(struct distribution), IPC_CREAT | 0666);
     if (shmid_distribution == -1) {
@@ -50,11 +49,20 @@ int main(int argc, char *argv[]) {
         perror("shmat (families)");
         return 1;
     }
+    int shmid_storage= shmget(shm_keyStorage, sizeof(struct storageRoom), IPC_CREAT | 0666);
+    if (shmid_storage == -1) {
+        perror("shmget (storage)");
+        return 1;
+    }
+    struct storageRoom *storage = (struct storageRoom *)shmat(shmid_storage, NULL, 0);
+    if (storage == (void *)-1) {
+        perror("shmat (storage)");
+        return 1;
+    }
     distributers_ptr->pids[teamleadNumber] = getpid();
     distributers_ptr->dist[teamleadNumber].pidTeam = getpid();
     distributers_ptr->dist[teamleadNumber].energy = getRandomRange(minimumEnergy, maximumEnergy);
     distributers_ptr->dist[teamleadNumber].status=0;
-
     // for(int i=1; i< processPerTeamPlusLead; i++){
     //     if(!fork()){
     //         distributers_ptr->pids[(teamleadNumber * processPerTeamPlusLead)+i] = getpid();
@@ -80,7 +88,10 @@ int main(int argc, char *argv[]) {
         if(!fork()){
             while(1){
                 for(int i=0; i< families; i++){
-                    if(families_ptr->fam[i].status!=2){
+                    if(families_ptr->fam[i].starvationRate>=90){
+                        families_ptr->fam[i].status=2;
+                    }
+                    else{
                         families_ptr->fam[i].starvationRate+=familiesStarvationRate;
                     }
                 }
@@ -99,14 +110,13 @@ int main(int argc, char *argv[]) {
     } arg;
     arg.val = 1;
 
-
     while(1){
         sleep(2);
         if(distributers_ptr->dist[teamleadNumber].status==0 ){
             for(int i=0; i<families; i++){
                 if (families_ptr->fam[i].status == 0 && distributers_ptr->dist[teamleadNumber].numberOfBags > 0 && i == findMaxStarvationIndex(families_ptr,families)){  
                     families_ptr->fam[i].status =1;      
-                    distributers_ptr->dist[teamleadNumber].status=1;  
+                    distributers_ptr->dist[teamleadNumber].status=i;  
                     cout << "Dist team " << teamleadNumber << " Going to family with id " << families_ptr->fam[i].id << 
                     " With bags " << distributers_ptr->dist[teamleadNumber].numberOfBags << endl;
                     if(families_ptr->fam[i].starvationRate - (distributers_ptr->dist[teamleadNumber].numberOfBags * 10) > 0){
@@ -116,6 +126,7 @@ int main(int argc, char *argv[]) {
                         families_ptr->fam[i].starvationRate=0;
                     }
                     distributers_ptr->dist[teamleadNumber].energy-= energyDepletionRate;
+                    cout << "Team " << teamleadNumber <<" Energy " <<distributers_ptr->dist[teamleadNumber].energy << endl;
                     cout << " Team " << teamleadNumber << " sleeping " << energyDelay(distributers_ptr->dist[teamleadNumber].energy) << endl;
                     distributers_ptr->dist[teamleadNumber].numberOfBags = 0;
                     sleep(energyDelay(distributers_ptr->dist[teamleadNumber].energy));
@@ -128,6 +139,7 @@ int main(int argc, char *argv[]) {
                 if(families_ptr->fam[i].starvationRate>=90 && families_ptr->fam[i].status!=2){
                     families_ptr->fam[i].status=2;
                     cout << "Family with id " << families_ptr->fam[i].id << " is dead" << endl;
+                    cout << "Storage room :" << storage->totalWeight << endl;
                 }
             }
         }
