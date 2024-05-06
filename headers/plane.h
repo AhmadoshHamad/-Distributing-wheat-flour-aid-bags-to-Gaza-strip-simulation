@@ -1,6 +1,7 @@
 #ifndef PLANE_H
 #define PLANE_H
 
+#include "headers/File.h"
 using namespace std;
 
 class Plane
@@ -14,7 +15,7 @@ class Plane
     Plane(){ // 
         refillTime =0;
         altidute =0;
-        containers =0;
+        containers =readFromFile("wheatBagsCount=");
         dropTime =0;
     }
 

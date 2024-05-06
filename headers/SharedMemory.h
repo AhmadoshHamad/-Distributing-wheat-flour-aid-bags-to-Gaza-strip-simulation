@@ -28,8 +28,16 @@ using namespace std;
             perror("shmat: parent");
             exit(2);
         }
-        cout << "attached ";
+        // cout << "attached ";
         return shmPtr;
+    }
+
+    void resetSharedMemory(){ // remove any previous data
+        char zeros [4000];
+        memset(zeros,0,4000);
+
+        char * shmPtr = attachSharedMemory(create_OpenSharedMemory(10));
+        memcpy(shmPtr,&zeros,sizeof(zeros));
     }
 
 
