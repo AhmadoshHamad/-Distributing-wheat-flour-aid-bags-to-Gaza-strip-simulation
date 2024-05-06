@@ -1,23 +1,24 @@
 #include "headers/all.h"
 
-int shmid; // shared memory id
+int shmid; // shared memory id 
 char * shmPtr; // shared memory pointer
 #define ContainerKEY 15
-char container_semName[20] = "/container"; 
+char container_semName[20] = "/container";
+int maxWeight = readFromFile("ContainerWeight=");
 
-
-int main(int argc , char * argv[]){
+int main(int argc , char * argv[]){ 
+    cout << atoi(argv[1]) << endl;
         // crate or open semaphore
-    sem_t * containerSem = create_openSemaphore(container_semName);
+    sem_t * containerSem = create_openSemaphore(container_semName); 
         // lock the mutex 
     usleep(50000);
-    sem_wait(containerSem);
+    sem_wait(containerSem); 
         // create a shared memory if exisits use it 
-    shmid = create_OpenSharedMemory(ContainerKEY);
+    shmid = create_OpenSharedMemory(ContainerKEY); 
         // return a pointer of the shared memory to use it 
     shmPtr = attachSharedMemory(shmid);
-    Container container(50,100,1);
-
+    Container container(atoi(argv[1])  , getRandomRange(50,maxWeight) ,  FALLING);
+    container.printDetails(); 
 
         // navigate to the shared memory location 
     int offset = PlaneCriticalSection(ContainerKEY);
@@ -59,44 +60,6 @@ int main(int argc , char * argv[]){
 
         sem_post(sharedSem);
     }
-
-
-        // container.printDetails();
-     
-    // cout << "container  sem " <<container_sem << endl;
-   
-
-    // cout << argv[1] << endl;
-    // Container container(atoi(argv[1]), 99,FALLING);
-    // int decremental = 1;
-
-    //     // copy data to shared memory
-    // memcpy(shmPtr,&container,sizeof(Container));
-
-
-
-
-    // cout << "Data written to shared memoery \n";
-    // while (1){
-    //     // sem_wait(container_mutex);
-    //     memcpy(&container,shmPtr,sizeof(Container));
-        
-    //     if(container.status == BLOWN || container.status == LANDED){
-    //         // sem_post(container_mutex);
-    //         break;
-    //     }
-    //     if(container.status == FALLING){
-    //         container.decreaseAltitude();
-    //         memcpy(shmPtr,&container,sizeof(Container));
-    //     }
-
-    //     // usleep(500000);
-    //     // sem_post(container_mutex);
-    // }
-
-    // cout << "container reached Ground or Blown!" << endl;
-    // container.printDetails();
-    
 
 
 }

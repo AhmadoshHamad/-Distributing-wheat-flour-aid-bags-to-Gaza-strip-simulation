@@ -11,43 +11,30 @@ int main(int argc, char * argv []){
   int maximumRefillTime = readFromFile("maximumRefillTime=");
   int minimumContainers = readFromFile("minimumContainerCount=");
   int maximumContainers = readFromFile("maximumContainerCount=");
-    Plane plane(getRandomRange(minimumRefillTime, maximumRefillTime),50,getRandomRange(minimumContainers, maximumContainers),3);
+  int minPlaneHeight = readFromFile("minPlaneHeight=");
+  int maxPlaneHeight = readFromFile("maxPlaneHeight=");
+  int minimumDropContainerTime = readFromFile("minimumDropContainerTime=");
+  int maximumDropContainerTime = readFromFile("maximumDropContainerTime=");
+    // initialise plane with random altidude, noContainers and refill time
+    Plane plane(getRandomRange(minimumRefillTime, maximumRefillTime),    getRandomRange(minPlaneHeight,maxPlaneHeight),     getRandomRange(minimumContainers, maximumContainers),getRandomRange(minimumDropContainerTime,maximumDropContainerTime));
     plane.printDetails();
     resetSharedMemory();  
 
+    while (1){
+      
     for (int i=0; i< plane.containers; i++){
       
         char index[4]; // Convert integer index to string
         // plane.altidute+=i;
-        snprintf(index, sizeof(index), "%zu", i);    
+        snprintf(index, sizeof(index), "%zu", plane.altidute);    
         if(!fork())
           execlp("./container","container",index);
-        
-        
-        // usleep(500);
 
+        sleep(plane.dropTime); // time between dropping containers
 
-        sleep(plane.dropTime);
       }
 
-
-      // for (size_t i = 0; i < 2; i++){
-      //   wait(NULL);
-      // }
-      
-   
-    //   char * shmPtr = attachSharedMemory(create_OpenSharedMemory(10));
-    //   shmPtr+=8;
-
-
-    // for (size_t i = 0; i < 5; i++){
-    //   Container container(0,0,0);
-    //   memcpy(&container,shmPtr,sizeof(Container));
-    //   container.printDetails();
-    //   shmPtr += sizeof(Container);
-    // }
-
-
-      
+      sleep(plane.refillTime); // refill time of plane
+    }
 
 }
