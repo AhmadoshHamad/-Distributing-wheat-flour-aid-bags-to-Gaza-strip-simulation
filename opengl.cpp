@@ -10,6 +10,8 @@
 #include <sys/sem.h>
 #include <random>
 #include "dist.h"
+#include <signal.h>
+#include <sys/wait.h>
 
 using namespace std;
 
@@ -95,18 +97,31 @@ int familiesStarvationRate;
 int wheatBagsCount;
 int energyDepletionRate;
 int distributersMinimumCount;
+int shotContainersCount;
+int collectorsDeathCount;
+int distributersDeathCount;
+int crashedPlanesCount;
+int familyDeathRate;
+int familyThreshold;
+int  minimumFamilies;
+int ContainerWeight;
 
 
 // timers
 int timer2=0;
-
+int childID;
 int timer3=10;
-int deathrate=70;
+int deathrate=30;
 int timer4=0;
 int timer5=10;
-
+int counterDrop=0;
 int counter=0;
+int counterCollect=0;
+int counterDist=0;
 int timerIDF=0;
+int counterPlane=0;
+int counterfamily=0;
+int counterFamilies=0;
 
 
 Square *squares;
@@ -119,7 +134,6 @@ Distributers*distributers;
 int maxDropPoints = 100;
 bool animate = true; // Flag to control animation
 bool gameOver = false; // Flag to indicate if the game is over
-
 
 void drawSquare(float x, float y, float width, float height, float r, float g, float b) {
     glColor3f(r, g, b);
@@ -157,6 +171,7 @@ void handleShots(int value) {
                 if ( dropPoints[highestDropIndex].active) {
                         if (dropPoints[highestDropIndex].health!=0){
                         dropPoints[highestDropIndex].health -= idf[i].damageRate;
+                        counterDrop++;
                         if (dropPoints[highestDropIndex].health <= 0) {
                             dropPoints[highestDropIndex].health=0;
                         }
@@ -178,7 +193,7 @@ void decreaseNumbers(int value) {
                     dropPoints[j].x = squares[i].x + squareWidth / 2;
                     dropPoints[j].y = squares[i].height; 
                     dropPoints[j].height = 0.7f;
-                    dropPoints[j].health = 100; 
+                    dropPoints[j].health = ContainerWeight; 
                     dropPoints[j].active = true; 
                     break;
                 }
@@ -226,7 +241,7 @@ void initializeSquares() {
     dropPoints = new DropPoint[maxDropPoints];
     for (int i = 0; i < maxDropPoints; ++i) {
         dropPoints[i].active = false;
-        dropPoints[i].health = 100; 
+        dropPoints[i].health = ContainerWeight; 
     }
     for (int i = 0; i < numidf; ++i) {
        idf[i].shots=numShots+i;
@@ -316,7 +331,7 @@ void display() {
     glVertex2f(-0.8f, -0.3f);
     glEnd();
     glColor3f(1.0f, 1.0f, 1.0f); 
-    glRasterPos2f(-1.0f, -0.5f); 
+    glRasterPos2f(-1.0f, -0.45f); 
     const char* text = "Families";
     for (const char* c = text; *c; ++c) {
         glutBitmapCharacter(GLUT_BITMAP_TIMES_ROMAN_24, *c);
@@ -410,7 +425,7 @@ void display() {
         for (int i = 0; i < distributersNum; i++)
         {
             if(spliters[j].weight>distributers[i].bags &&spliters[j].timer==1 &&  distributers[i].haveBags==false ){ 
-                spliters[j].weight-=distributers[i].bags;
+                spliters[j].weight-=(distributers[i].bags*10);
                 spliters[j].timer=0;
                 distributers[i].haveBags=true;
             }
@@ -462,14 +477,43 @@ void display() {
     }
     timer2++;
     for (int i = 0; i < FamiliesNum;) {
-         float x = -0.89f ; 
+        float x = -0.89f ; 
         drawSquare(x , yf, squareWidth -0.05f, squareHeight-0.05f, 0.7f, 1.0f, 0.7f);
         string numText = to_string(families[i].starvation);
         drawText(x + (squareWidth / 2)-0.05f , yf + squareHeight-0.05f , numText);
         if (timer2==timePerStarvationRate){
-        families[i].starvation+=familiesStarvationRate;
-        families[i+1].starvation+=familiesStarvationRate;
+        if(families[i].starvation+familiesStarvationRate>=100){
+             families[i].starvation=100;
+        }else{
+          families[i].starvation+=familiesStarvationRate;
+            if (families[i].starvation >= familyThreshold){
+            counterFamilies++;
+            }
+        }
+        if (families[i].starvation>=100){
+            for (int j = i; j < FamiliesNum - 1; ++j) {
+                families[j] = families[j + 1];
+            }
+            FamiliesNum--; 
+            counterfamily++;
+        }
+        if(families[i+1].starvation+familiesStarvationRate>=100){
+            families[i+1].starvation=100;
+        }else{
+          families[i+1].starvation+=familiesStarvationRate;
+            if (families[i+1].starvation >= familyThreshold){
+            counterFamilies++;
+            }
+        }
+        if (families[i+1].starvation>=100){
+            for (int j = i; j < FamiliesNum - 1; ++j) {
+                families[j] = families[j + 1];
+            }
+            FamiliesNum--; 
+            counterfamily++;
+            continue;
         } 
+        }
         if(i+1 == FamiliesNum)
              break;
         numText = to_string(families[i+1].starvation);
@@ -510,6 +554,7 @@ void display() {
 
             // Decrement the number of collectors since one collector is removed
             numcoll--;
+            counterCollect++;
             timer4++;
                    
             }
@@ -559,6 +604,7 @@ void display() {
             drawSquare(x-0.08f, y, squareWidth -0.05f, squareHeight-0.05f, 0.0f, 0.0f, 1.0f);
 
             // Decrement the number of collectors since one collector is removed
+            counterDist++;
             distributersNum--;
             counter++;
             
@@ -572,7 +618,7 @@ void display() {
                 counter=0;
                 distributersMinimumCount=1;
                 distributersNum++; // Increment the number of collectors
-
+                distributers[distributersNum-1].health=100;
                 // Shift the elements in the splitters array to remove the first splitter
                 for (int k = 0; k < spliternum - 1; k++) {
                     spliters[k] = spliters[k + 1]; // Shift elements to the left
@@ -615,6 +661,7 @@ void display() {
             for (int k = j; k < numSquares - 1; ++k) {
                 squares[k] = squares[k + 1];
             }
+            counterPlane++;
             --numSquares;
             --j;
         }
@@ -642,7 +689,12 @@ void display() {
     }
 
 }
-     if(spliternum <=1 ){
+     
+     
+     
+    if(spliternum <=1 || counterDrop>=shotContainersCount || counterCollect >= collectorsDeathCount || counterDist >= distributersDeathCount || counterPlane>=crashedPlanesCount || counterfamily>=familyDeathRate || counterFamilies>=minimumFamilies ){
+       
+        
         animate =false;
         gameOver =true;
      }
@@ -650,16 +702,27 @@ void display() {
     }else if( gameOver ){
         glColor3f(1.0f, 1.0f, 1.0f); 
         glRasterPos2f(-0.2f, 0.0f);
-        const char* text = "Game over  majjjad";
+        const char* text = "Game over";
         for (const char* c = text; *c; ++c) {
             glutBitmapCharacter(GLUT_BITMAP_TIMES_ROMAN_24, *c); 
         }
+        long long  r = 2000000000;
         glutSwapBuffers();
+        for (int i = 0; i <r ; i++); 
+        pid_t pid = fork();  
+        if (pid == -1) {
+            perror("fork");
+        } else if (pid == 0) {
+            cout << "r";
+            char index[4]; // Convert integer index to string
+            snprintf(index, sizeof(index), "%zu", childID);
+            execlp("./gameOver", "gameOver",index);
+            perror("execlp");
+        }
     }
   
 
 }
-
 int main(int argc, char** argv) {
 
     numcoll=readFromFile("collectorsCommitteesCount=");
@@ -677,6 +740,27 @@ int main(int argc, char** argv) {
     wheatBagsCount=readFromFile("wheatBagsCount=");
     energyDepletionRate=readFromFile("energyDepletionRate=");
     distributersMinimumCount=readFromFile("distributersMinimumCount=");
+    shotContainersCount = readFromFile("shotContainersCount=");
+    collectorsDeathCount = readFromFile("collectorsDeathCount=");
+    distributersDeathCount =readFromFile("distributersDeathCount=");
+    crashedPlanesCount=readFromFile("crashedPlanesCount=");
+    familyDeathRate =readFromFile("familyDeathRate=");
+    familyThreshold=readFromFile("familyThreshold=");
+    minimumFamilies =readFromFile("minimumFamilies=");
+    ContainerWeight =readFromFile("ContainerWeight=");
+    pid_t pid = fork();  
+    if (pid == -1) {
+        perror("fork");
+        return EXIT_FAILURE;
+    } else if (pid == 0) {
+        childID = getpid();
+        // In child process, execute main program
+        execlp("./main", "main", NULL);
+
+        // If execlp fails, print error
+        perror("execlp");
+        return EXIT_FAILURE;
+    }
 
     glutInit(&argc, argv);
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB);
